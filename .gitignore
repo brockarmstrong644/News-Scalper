@@ -1,0 +1,10 @@
+# Secrets - NEVER commit real API keys
+config/settings.json
+
+# Generated data
+data/
+logs/
+
+# Python
+__pycache__/
+*.pyc

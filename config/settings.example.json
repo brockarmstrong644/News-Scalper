@@ -1,0 +1,13 @@
+{
+    "anthropic_api_key": "YOUR_ANTHROPIC_KEY_HERE",
+    "model": "claude-opus-4-8",
+    "finnhub_api_key": "YOUR_FINNHUB_KEY_HERE",
+    "fred_api_key": "YOUR_FRED_KEY_HERE",
+    "llm_notes_enabled": true,
+    "cache_rules": {
+        "earnings_ttl_hours": null,
+        "market_ttl_hours": 24,
+        "fed_ttl_hours": 168,
+        "econ_ttl_hours": 168
+    }
+}
