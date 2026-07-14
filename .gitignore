@@ -1,5 +1,9 @@
 # Secrets - NEVER commit real API keys
 config/settings.json
+server/config.json
+
+# Central database
+server/*.db
 
 # Generated data
 data/

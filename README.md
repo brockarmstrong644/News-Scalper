@@ -85,6 +85,44 @@ All numeric signals are deterministic rule-based math — the LLM only writes
 the `notes` text, so the trading program's inputs never vary between runs on
 the same data.
 
+## Central database (optional, via Cloudflare Tunnel)
+
+Every report can also be mirrored to one central SQLite database so all
+collected data ends up organized in one place (even from multiple PCs).
+
+**On the machine behind your Cloudflare Tunnel:**
+
+1. Copy the `server/` folder there (it only needs Python, no extra packages).
+2. Copy `server/config.example.json` to `server/config.json` and set a long
+   random `api_key`.
+3. Start it: `python server/db_server.py` (or `run_server.bat`).
+   It listens on port 8899 — point your tunnel's ingress at
+   `http://localhost:8899`.
+
+**On each machine running the agent** (`config/settings.json`):
+
+```json
+"sync_enabled": true,
+"sync_url": "https://YOUR-TUNNEL-URL/ingest",
+"sync_api_key": "<same secret as server/config.json>"
+```
+
+(Use `http://127.0.0.1:8899/ingest` when the agent runs on the same PC as
+the server.)
+
+Each processed symbol is then inserted into `server/newsscalper.db`:
+`reports` table (the CSV rows + which PC sent them) and `raw_data` table
+(the raw Finnhub/FRED JSON, so signals can be recomputed later with
+different thresholds). Duplicate rows are ignored automatically. If the
+server is unreachable, reports queue in `data/outbox/` and re-send the
+next time the agent starts.
+
+Get everything back out at any time:
+
+- `https://YOUR-TUNNEL-URL/export.csv` (send the `X-Api-Key` header) — full CSV dump
+- `https://YOUR-TUNNEL-URL/health` — row count / uptime check
+- or open `server/newsscalper.db` with any SQLite tool and run SQL
+
 ## Caching ("reference already found data first")
 
 Every skill checks `data/cache/` before calling an API:

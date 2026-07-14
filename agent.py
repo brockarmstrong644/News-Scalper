@@ -19,7 +19,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-from core import cache, csv_writer, llm
+from core import cache, csv_writer, llm, sync
 from skills import earnings_skill, market_skill, fed_skill, econ_skill
 
 PROJECT_ROOT = Path(__file__).resolve().parent
@@ -143,6 +143,11 @@ def process_symbol(symbol, settings):
     row["notes"] = llm.write_notes(row, raw_context, settings)
 
     path = csv_writer.append_row(row)
+    sync_status = sync.send_report(row, raw_context, settings)
+    if sync_status == "synced":
+        print("  database: synced to central db")
+    elif sync_status == "queued":
+        print("  database: unreachable - queued in data/outbox for retry")
     print(f"  signals: earnings {signals['earnings']:+d}  market {signals['market']:+d}  "
           f"fed {signals['fed']:+d}  econ {signals['econ']:+d}  "
           f"-> composite {composite:+.3f}")
@@ -156,6 +161,12 @@ def main():
     setup_logging()
     settings = load_settings()
     cache.configure(settings.get("cache_rules", {}))
+
+    sent, remaining = sync.flush_outbox(settings)
+    if sent:
+        print(f"  (synced {sent} queued report(s) to the central database)")
+    if remaining:
+        print(f"  ({remaining} report(s) still queued - database unreachable)")
 
     print(BANNER)
     if not settings["finnhub_api_key"]:

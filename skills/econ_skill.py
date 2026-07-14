@@ -51,14 +51,22 @@ def find(api_key):
       "unemployment_change": 0.0, "signal": 1, "from_cache": bool
     }
     """
-    cpi, cpi_cached = _series("CPIAUCSL", api_key, 13)
-    unrate, un_cached = _series("UNRATE", api_key, 2)
+    # Ask for extra months: FRED can include unreleased obs as "." which get
+    # filtered out, and the year-ago value is matched by date, not position.
+    cpi, cpi_cached = _series("CPIAUCSL", api_key, 18)
+    unrate, un_cached = _series("UNRATE", api_key, 4)
 
     if len(cpi) < 13 or len(unrate) < 2:
         return None
 
-    cpi_now = float(cpi[0]["value"])
-    cpi_year_ago = float(cpi[12]["value"])
+    latest = cpi[0]
+    year_ago_date = f"{int(latest['date'][:4]) - 1}{latest['date'][4:]}"
+    year_ago = next((o for o in cpi if o["date"] == year_ago_date), None)
+    if year_ago is None:
+        return None
+
+    cpi_now = float(latest["value"])
+    cpi_year_ago = float(year_ago["value"])
     inflation = (cpi_now / cpi_year_ago - 1.0) * 100.0
 
     unemployment = float(unrate[0]["value"])
