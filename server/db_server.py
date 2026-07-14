@@ -17,7 +17,9 @@ Run:    python db_server.py   (or run_server.bat)
 """
 
 import json
+import os
 import sqlite3
+import sys
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -26,6 +28,20 @@ from urllib.parse import unquote
 ROOT = Path(__file__).resolve().parent
 CONFIG_PATH = ROOT / "config.json"
 DB_PATH = ROOT / "newsscalper.db"
+
+# ── console styling ─────────────────────────────────────────────────────────
+os.system("")  # enables ANSI escape codes in the Windows console
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+except Exception:
+    pass
+CYAN, GREEN, YELLOW, RED, DIM, BOLD, RESET = (
+    "\033[96m", "\033[92m", "\033[93m", "\033[91m", "\033[2m", "\033[1m", "\033[0m",
+)
+
+
+def stamp():
+    return datetime.now().strftime("%H:%M:%S")
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS exports (
@@ -116,6 +132,8 @@ class Handler(BaseHTTPRequestHandler):
             self._send(404, {"error": "not found"})
             return
         if not self._authorized():
+            print(f"{DIM}[{stamp()}]{RESET} {RED}rejected upload from "
+                  f"{self.address_string()} - bad api key{RESET}", flush=True)
             self._send(401, {"error": "bad api key"})
             return
         try:
@@ -148,19 +166,37 @@ class Handler(BaseHTTPRequestHandler):
                 ),
             )
             conn.commit()
+            total = conn.execute("SELECT COUNT(*) FROM exports").fetchone()[0]
+            rows = max(0, sum(1 for ln in csv_text.splitlines()
+                              if ln and not ln.startswith("#")) - 1)
+            print(f"{DIM}[{stamp()}]{RESET} {GREEN}{BOLD}NEW DATA{RESET}  "
+                  f"{BOLD}{filename}{RESET}  "
+                  f"{DIM}{payload.get('symbol', '?')} · {payload.get('dtype', '?')} · "
+                  f"{rows} rows · from {payload.get('source', 'unknown')}"
+                  f"  |  {total} export(s) in pool{RESET}", flush=True)
             self._send(200, {"ok": True, "filename": filename})
         finally:
             conn.close()
 
     def log_message(self, fmt, *args):
-        print(f"{self.address_string()} {fmt % args}")
+        pass  # arrivals are announced explicitly above; keep the console clean
 
 
 def main():
     port = int(CONFIG.get("port", 8899))
-    connect().close()  # create the database up front
-    print(f"NewsScalper database server on http://0.0.0.0:{port}")
-    print(f"Database: {DB_PATH}")
+    conn = connect()  # create the database up front
+    total = conn.execute("SELECT COUNT(*) FROM exports").fetchone()[0]
+    conn.close()
+    line = "─" * 62
+    print(f"""
+{CYAN}┌{line}┐
+│{BOLD}         N E W S S C A L P E R   ·   Collection Server        {RESET}{CYAN}│
+├{line}┤{RESET}
+{DIM}  Listening   http://0.0.0.0:{port}   (tunnel ingress -> localhost:{port})
+  Database    {DB_PATH}
+  In pool     {total} export(s)
+  Watching for incoming data ... new arrivals are announced below.{RESET}
+{CYAN}└{line}┘{RESET}""", flush=True)
     ThreadingHTTPServer(("0.0.0.0", port), Handler).serve_forever()
 
 

@@ -63,6 +63,9 @@ def banner(root):
             mac = macroeconomic (Dow, inflation, jobs, econ_state)
   Output    {root}
   Commands  type symbols (AAPL, MSFT), 'all' = watchlist, 'quit'{RESET}
+{CYAN}├{line}┤{RESET}
+  {YELLOW}Bored while data loads?  Play Flappy Bird:{RESET} {BOLD}https://qdcode.us/flappy{RESET}
+  {DIM}Data pool - browse ALL collected data at{RESET} https://qdcode.us {YELLOW}(coming soon){RESET}
 {CYAN}└{line}┘{RESET}""")
 
 

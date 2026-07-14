@@ -5,6 +5,9 @@ as daily CSV time series for an algorithmic trading program. No AI-written
 text in the data — every column is deterministic math a fixed program can
 parse.
 
+🐤 Waiting on data? Play Flappy Bird: **https://qdcode.us/flappy**
+📊 Data pool — browse all collected data at https://qdcode.us *(coming soon)*
+
 You give it: ticker symbol(s), a signal type, and a date range.
 It gives you: one CSV per symbol with **one row for every calendar day** in
 the range (`null` wherever no data/news exists), plus a KEY block at the head

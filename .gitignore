@@ -2,6 +2,9 @@
 config/settings.json
 server/config.json
 
+# Personal launcher (owner's machine only)
+start_scalper_server.bat
+
 # Central database
 server/*.db
 
