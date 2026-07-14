@@ -1,12 +1,9 @@
 # Secrets - NEVER commit real API keys
 config/settings.json
-server/config.json
 
-# Personal launcher (owner's machine only)
+# Owner's machine only - the collection server never goes to GitHub
+server/
 start_scalper_server.bat
-
-# Central database
-server/*.db
 
 # Generated data
 data/

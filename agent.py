@@ -28,7 +28,7 @@ except ImportError:
     msvcrt = None
 
 from core import cache, csv_writer, sync
-from skills import earnings_skill, fed_skill, econ_skill
+from skills import earnings_skill, fed_skill, econ_skill, price_skill
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 CONFIG_PATH = PROJECT_ROOT / "config" / "settings.json"
@@ -39,6 +39,7 @@ SKILLS = {
     "sup": ("Earnings surprise", earnings_skill),
     "fed": ("Federal Reserve", fed_skill),
     "mac": ("Macroeconomic", econ_skill),
+    "prc": ("Daily prices", price_skill),
 }
 
 # ── ANSI styling ────────────────────────────────────────────────────────────
@@ -61,6 +62,7 @@ def banner(root):
 ├{line}┤{RESET}
 {DIM}  Signals   sup = earnings surprise   fed = Federal Reserve
             mac = macroeconomic (Dow, inflation, jobs, econ_state)
+            prc = daily prices (stocks, ETFs, futures: NQ, ES ...)
   Output    {root}
   Commands  type symbols (AAPL, MSFT), 'all' = watchlist, 'quit'{RESET}
 {CYAN}├{line}┤{RESET}
@@ -113,13 +115,14 @@ def prompt_symbols():
 
 def prompt_signal():
     while True:
-        entry = input(f"{CYAN}  signal {RESET} {DIM}(sup | fed | mac){RESET} > ").strip().lower()
-        aliases = {"1": "sup", "2": "fed", "3": "mac",
-                   "earnings": "sup", "surprise": "sup", "macro": "mac"}
+        entry = input(f"{CYAN}  signal {RESET} {DIM}(sup | fed | mac | prc){RESET} > ").strip().lower()
+        aliases = {"1": "sup", "2": "fed", "3": "mac", "4": "prc",
+                   "earnings": "sup", "surprise": "sup", "macro": "mac",
+                   "price": "prc", "prices": "prc"}
         entry = aliases.get(entry, entry)
         if entry in SKILLS:
             return entry
-        print(f"  {YELLOW}pick one of: sup, fed, mac{RESET}")
+        print(f"  {YELLOW}pick one of: sup, fed, mac, prc{RESET}")
 
 
 def _read_month_windows(label):
