@@ -180,7 +180,7 @@ def run_export(symbol, dtype, start, end, settings):
     name, skill = SKILLS[dtype]
     print(f"\n  {BOLD}{symbol}{RESET}  {DIM}{name} · {start} .. {end}{RESET}")
     try:
-        day_data = skill.fetch_range(symbol, start, end, settings)
+        day_data, note = skill.fetch_range(symbol, start, end, settings)
     except Exception as exc:
         print(f"  {RED}data fetch failed: {exc}{RESET}")
         logging.error("%s %s: %s", dtype, symbol, exc)
@@ -190,8 +190,11 @@ def run_export(symbol, dtype, start, end, settings):
         symbol, dtype, start, end, skill.COLUMNS, skill.KEY_LINES, day_data
     )
     total_days = sum(1 for _ in csv_writer._daterange(start, end))
-    print(f"  {GREEN}exported{RESET} {path.name}  "
+    status_color = GREEN if day_data else YELLOW
+    print(f"  {status_color}exported{RESET} {path.name}  "
           f"{DIM}({total_days} days, {len(day_data)} with data){RESET}")
+    if note:
+        print(f"  {YELLOW}note: {note}{RESET}")
     print(f"  {DIM}saved to {path.parent}{RESET}")
 
     status = sync.send_export(path, symbol, dtype, start, end, settings)

@@ -59,7 +59,8 @@ def _year_ago(date_str):
 
 
 def fetch_range(symbol, start, end, settings):
-    """Return {date_str: {column: value}}. symbol unused (macro is market-wide)."""
+    """Return ({date_str: {column: value}}, note). symbol unused (macro is
+    market-wide)."""
     api_key = settings["fred_api_key"]
 
     # Fetch extra history: 45 days of Dow for the 30-day trend and 14 months
@@ -159,4 +160,9 @@ def fetch_range(symbol, start, end, settings):
             days.setdefault(d, {})["econ_state"] = bucket
         cursor += timedelta(days=1)
 
-    return days
+    note = None
+    if not dow:
+        note = ("FRED returned no Dow data for this range (DJIA covers "
+                "roughly the last 10 years) - dow columns and econ_state "
+                "will be sparse")
+    return days, note

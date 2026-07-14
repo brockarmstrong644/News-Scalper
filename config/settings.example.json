@@ -5,7 +5,7 @@
     "sync_url": "https://your-tunnel-url.example.com/ingest-file",
     "sync_api_key": "SAME_SECRET_AS_SERVER_CONFIG_JSON",
     "cache_rules": {
-        "earnings_ttl_hours": null,
+        "earnings_ttl_hours": 24,
         "market_ttl_hours": 24,
         "fed_ttl_hours": 168,
         "econ_ttl_hours": 168

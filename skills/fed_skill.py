@@ -26,8 +26,8 @@ KEY_LINES = [
 
 
 def fetch_range(symbol, start, end, settings):
-    """Return {date_str: {column: value}} for the range. symbol is unused
-    (fed data is market-wide) but kept for a uniform skill interface."""
+    """Return ({date_str: {column: value}}, note) for the range. symbol is
+    unused (fed data is market-wide) but kept for a uniform skill interface."""
     observations = fred.series_range(
         "DFF", start, end, settings["fred_api_key"], category="fed"
     )
@@ -49,4 +49,9 @@ def fetch_range(symbol, start, end, settings):
             "fed_signal": signal,
         }
         prev = value
-    return days
+
+    note = None
+    if not days:
+        note = ("FRED returned no fed funds observations - check the "
+                "fred_api_key and that the range is not in the future")
+    return days, note

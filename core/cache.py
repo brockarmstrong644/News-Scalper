@@ -39,8 +39,12 @@ def _path(category, key):
     return folder / f"{safe}.json"
 
 
-def get(category, key):
-    """Return cached data, or None if missing/expired/corrupt."""
+def get(category, key, ignore_ttl=False):
+    """Return cached data, or None if missing/expired/corrupt.
+
+    ignore_ttl=True returns the data even when expired - used by skills
+    that merge fresh fetches into an accumulated archive.
+    """
     p = _path(category, key)
     if not p.exists():
         return None
@@ -49,7 +53,7 @@ def get(category, key):
     except (json.JSONDecodeError, OSError):
         return None
     ttl = _ttl_seconds.get(category)
-    if ttl is not None and time.time() - entry.get("fetched_at", 0) > ttl:
+    if not ignore_ttl and ttl is not None and time.time() - entry.get("fetched_at", 0) > ttl:
         return None
     return entry.get("data")
 

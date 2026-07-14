@@ -110,9 +110,14 @@ Date entry is digits-only — type `032025` and it displays `03-2025`.
 Ranges ending in the future are capped at today. `all` runs every symbol in
 the watchlist.
 
-Notes on data coverage: Finnhub's free tier returns roughly the last four
-reported quarters, so `sup` files for old ranges may be sparse. Futures
+Notes on data coverage: Finnhub's free tier only serves roughly the last
+four reported quarters, so `sup` files for old ranges may be sparse. The
+agent works around this with a **growing earnings archive** — every fresh
+fetch is merged into `data/cache/earnings/`, so history gets deeper the
+longer the agent keeps running (nothing is ever thrown away). Futures
 symbols (NQ, ES) have no company earnings — use `fed`/`mac` for those.
+The agent prints a coverage note after every export explaining exactly
+what was found.
 
 ## Central database (optional, via Cloudflare Tunnel)
 
@@ -150,7 +155,9 @@ Getting data back out (send the `X-Api-Key` header):
 
 ## Caching ("reference already found data first")
 
-Every skill checks `data/cache/` before calling an API. Past earnings never
-expire; FRED series refresh after 7 days; Dow data after 24 h. TTLs are
-configurable in `settings.json` → `cache_rules` (hours; `null` = never).
-Delete a file under `data/cache/` to force a refetch.
+Every skill checks `data/cache/` before calling an API. The earnings
+archive refreshes daily but **accumulates** (new quarters are merged in,
+old ones are kept forever); FRED series refresh after 7 days; Dow data
+after 24 h. TTLs are configurable in `settings.json` → `cache_rules`
+(hours; `null` = never expire). Delete a file under `data/cache/` to
+force a refetch.
