@@ -1,3 +1,12 @@
 # One ticker per line. Lines starting with # are ignored.
 # Type "all" in the agent to run every symbol in this file.
-NQ
+# Sample equities (edit freely):
+AAPL
+MSFT
+NVDA
+TSLA
+AMZN
+SPY
+# Note: futures contracts like NQ have no company earnings ("sup" will be
+# empty for them), but "fed" and "mac" exports work for any symbol name.
+# NQ

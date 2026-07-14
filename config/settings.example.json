@@ -1,11 +1,8 @@
 {
-    "anthropic_api_key": "YOUR_ANTHROPIC_KEY_HERE",
-    "model": "claude-opus-4-8",
     "finnhub_api_key": "YOUR_FINNHUB_KEY_HERE",
     "fred_api_key": "YOUR_FRED_KEY_HERE",
-    "llm_notes_enabled": true,
     "sync_enabled": false,
-    "sync_url": "https://your-tunnel-url.example.com/ingest",
+    "sync_url": "https://your-tunnel-url.example.com/ingest-file",
     "sync_api_key": "SAME_SECRET_AS_SERVER_CONFIG_JSON",
     "cache_rules": {
         "earnings_ttl_hours": null,

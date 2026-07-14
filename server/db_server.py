@@ -1,63 +1,45 @@
 """Central database receiver.
 
 Runs on the machine behind your Cloudflare Tunnel. Agents POST finished
-report rows (plus the raw Finnhub/FRED payloads) here and everything is
-organized into one SQLite database: server/newsscalper.db
+CSV exports here and everything is organized into one SQLite database:
+server/newsscalper.db (exports table, one row per file, newest version
+of a filename replaces the old one).
 
 Endpoints (all require the X-Api-Key header except /health):
-  GET  /health       -> {"ok": true, "reports": <count>}
-  POST /ingest       -> body {"row": {...}, "raw": {...}} ; inserts one report
-  GET  /export.csv   -> the entire reports table as CSV
+  GET  /health               -> {"ok": true, "exports": <count>}
+  POST /ingest-file          -> body {"filename","symbol","dtype","start",
+                                      "end","source","csv_text"}
+  GET  /files                -> JSON list of stored exports
+  GET  /download/<filename>  -> the stored CSV
 
 Config: server/config.json  (copy config.example.json, set api_key)
 Run:    python db_server.py   (or run_server.bat)
 """
 
-import csv
-import io
 import json
 import sqlite3
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from urllib.parse import unquote
 
 ROOT = Path(__file__).resolve().parent
 CONFIG_PATH = ROOT / "config.json"
 DB_PATH = ROOT / "newsscalper.db"
 
 SCHEMA = """
-CREATE TABLE IF NOT EXISTS reports (
+CREATE TABLE IF NOT EXISTS exports (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    symbol TEXT NOT NULL,
-    earnings_date TEXT,
-    eps_actual REAL,
-    eps_estimate REAL,
-    surprise_pct REAL,
-    earnings_signal INTEGER,
-    market_signal INTEGER,
-    fed_signal INTEGER,
-    econ_signal INTEGER,
-    composite_score REAL,
-    notes TEXT,
-    generated_at TEXT,
+    filename TEXT NOT NULL UNIQUE,
+    symbol TEXT,
+    dtype TEXT,
+    start_date TEXT,
+    end_date TEXT,
     source TEXT,
-    received_at TEXT NOT NULL
-);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_reports_unique
-    ON reports (symbol, generated_at);
-CREATE TABLE IF NOT EXISTS raw_data (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    report_id INTEGER REFERENCES reports(id),
-    payload TEXT,
+    csv_text TEXT,
     received_at TEXT NOT NULL
 );
 """
-
-REPORT_COLUMNS = [
-    "symbol", "earnings_date", "eps_actual", "eps_estimate", "surprise_pct",
-    "earnings_signal", "market_signal", "fed_signal", "econ_signal",
-    "composite_score", "notes", "generated_at", "source",
-]
 
 
 def load_config():
@@ -97,28 +79,40 @@ class Handler(BaseHTTPRequestHandler):
         conn = connect()
         try:
             if self.path == "/health":
-                count = conn.execute("SELECT COUNT(*) FROM reports").fetchone()[0]
-                self._send(200, {"ok": True, "reports": count})
-            elif self.path == "/export.csv":
+                count = conn.execute("SELECT COUNT(*) FROM exports").fetchone()[0]
+                self._send(200, {"ok": True, "exports": count})
+            elif self.path == "/files":
                 if not self._authorized():
                     self._send(401, {"error": "bad api key"})
                     return
                 rows = conn.execute(
-                    f"SELECT {', '.join(REPORT_COLUMNS)}, received_at "
-                    "FROM reports ORDER BY id"
+                    "SELECT filename, symbol, dtype, start_date, end_date, "
+                    "source, received_at FROM exports ORDER BY symbol, filename"
                 ).fetchall()
-                buf = io.StringIO()
-                writer = csv.writer(buf)
-                writer.writerow(REPORT_COLUMNS + ["received_at"])
-                writer.writerows(rows)
-                self._send(200, buf.getvalue().encode("utf-8"), "text/csv")
+                self._send(200, [
+                    dict(zip(["filename", "symbol", "dtype", "start", "end",
+                              "source", "received_at"], r))
+                    for r in rows
+                ])
+            elif self.path.startswith("/download/"):
+                if not self._authorized():
+                    self._send(401, {"error": "bad api key"})
+                    return
+                filename = unquote(self.path[len("/download/"):])
+                row = conn.execute(
+                    "SELECT csv_text FROM exports WHERE filename = ?", (filename,)
+                ).fetchone()
+                if row is None:
+                    self._send(404, {"error": "no such file"})
+                else:
+                    self._send(200, row[0].encode("utf-8"), "text/csv")
             else:
                 self._send(404, {"error": "not found"})
         finally:
             conn.close()
 
     def do_POST(self):
-        if self.path != "/ingest":
+        if self.path != "/ingest-file":
             self._send(404, {"error": "not found"})
             return
         if not self._authorized():
@@ -127,7 +121,8 @@ class Handler(BaseHTTPRequestHandler):
         try:
             length = int(self.headers.get("Content-Length", 0))
             payload = json.loads(self.rfile.read(length))
-            row = payload["row"]
+            filename = payload["filename"]
+            csv_text = payload["csv_text"]
         except (json.JSONDecodeError, KeyError, ValueError):
             self._send(400, {"error": "bad payload"})
             return
@@ -135,23 +130,29 @@ class Handler(BaseHTTPRequestHandler):
         now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         conn = connect()
         try:
-            cur = conn.execute(
-                f"INSERT OR IGNORE INTO reports ({', '.join(REPORT_COLUMNS)}, received_at) "
-                f"VALUES ({', '.join('?' * len(REPORT_COLUMNS))}, ?)",
-                [row.get(c) for c in REPORT_COLUMNS] + [now],
+            conn.execute(
+                "INSERT INTO exports (filename, symbol, dtype, start_date, "
+                "end_date, source, csv_text, received_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?) "
+                "ON CONFLICT(filename) DO UPDATE SET csv_text = excluded.csv_text, "
+                "source = excluded.source, received_at = excluded.received_at",
+                (
+                    filename,
+                    payload.get("symbol"),
+                    payload.get("dtype"),
+                    payload.get("start"),
+                    payload.get("end"),
+                    payload.get("source"),
+                    csv_text,
+                    now,
+                ),
             )
-            inserted = cur.rowcount > 0
-            if inserted and payload.get("raw") is not None:
-                conn.execute(
-                    "INSERT INTO raw_data (report_id, payload, received_at) VALUES (?, ?, ?)",
-                    (cur.lastrowid, json.dumps(payload["raw"]), now),
-                )
             conn.commit()
-            self._send(200, {"ok": True, "inserted": inserted})
+            self._send(200, {"ok": True, "filename": filename})
         finally:
             conn.close()
 
-    def log_message(self, fmt, *args):  # quieter console
+    def log_message(self, fmt, *args):
         print(f"{self.address_string()} {fmt % args}")
 
 

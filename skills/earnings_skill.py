@@ -1,8 +1,13 @@
-"""Skill: company earnings.
+"""Skill: earnings surprise ("sup" export).
 
-Finds the most recent quarterly EPS actual vs. estimate for a symbol
-(Finnhub /stock/earnings) and scores the surprise as +1 / 0 / -1.
-Cached data is used first; past earnings never expire.
+Pulls quarterly EPS actual vs. estimate from Finnhub (/stock/earnings)
+and places each quarter on its period-end date within the range.
+
+Columns produced (non-null only on earnings dates):
+  eps_actual, eps_estimate, surprise_pct, sup_signal
+
+Note: Finnhub's free tier returns roughly the last four reported
+quarters, so very old date ranges may have empty files.
 """
 
 import requests
@@ -10,26 +15,27 @@ import requests
 from core import cache
 
 FINNHUB_URL = "https://finnhub.io/api/v1/stock/earnings"
-SURPRISE_THRESHOLD_PCT = 2.0  # |surprise| below this is treated as neutral
+SURPRISE_THRESHOLD_PCT = 2.0  # |surprise| below this is treated as in-line
+
+COLUMNS = ["eps_actual", "eps_estimate", "surprise_pct", "sup_signal"]
+
+KEY_LINES = [
+    "eps_actual = reported earnings per share for the quarter",
+    "eps_estimate = analyst consensus EPS estimate",
+    "surprise_pct = (actual - estimate) / |estimate| * 100",
+    "sup_signal = +1 beat (>= +2%), 0 in-line, -1 miss (<= -2%)",
+    "values appear on the quarter period-end date; all other days are null",
+    "null = no earnings event on that day",
+]
 
 
-def find(symbol, api_key):
-    """Return the latest earnings report for symbol, or None if unavailable.
-
-    {
-      "earnings_date": "2026-03-31",
-      "eps_actual": 1.52, "eps_estimate": 1.43,
-      "surprise_pct": 6.29, "signal": 1,
-      "from_cache": bool
-    }
-    """
+def fetch_range(symbol, start, end, settings):
+    """Return {date_str: {column: value}} for earnings events in range."""
     quarters = cache.get("earnings", symbol)
-    from_cache = quarters is not None
-
     if quarters is None:
         resp = requests.get(
             FINNHUB_URL,
-            params={"symbol": symbol, "token": api_key},
+            params={"symbol": symbol, "token": settings["finnhub_api_key"]},
             timeout=15,
         )
         resp.raise_for_status()
@@ -37,34 +43,25 @@ def find(symbol, api_key):
         if quarters:
             cache.put("earnings", symbol, quarters)
 
-    if not quarters:
-        return None
-
-    latest = quarters[0]  # Finnhub returns most recent quarter first
-    actual = latest.get("actual")
-    estimate = latest.get("estimate")
-    if actual is None or estimate is None:
-        return None
-
-    surprise_pct = latest.get("surprisePercent")
-    if surprise_pct is None:
-        if estimate == 0:
-            surprise_pct = 0.0
+    days = {}
+    for q in quarters or []:
+        period = q.get("period") or ""
+        actual, estimate = q.get("actual"), q.get("estimate")
+        if not (start <= period <= end) or actual is None or estimate is None:
+            continue
+        surprise = q.get("surprisePercent")
+        if surprise is None:
+            surprise = 0.0 if estimate == 0 else (actual - estimate) / abs(estimate) * 100.0
+        if surprise >= SURPRISE_THRESHOLD_PCT:
+            signal = 1
+        elif surprise <= -SURPRISE_THRESHOLD_PCT:
+            signal = -1
         else:
-            surprise_pct = (actual - estimate) / abs(estimate) * 100.0
-
-    if surprise_pct >= SURPRISE_THRESHOLD_PCT:
-        signal = 1
-    elif surprise_pct <= -SURPRISE_THRESHOLD_PCT:
-        signal = -1
-    else:
-        signal = 0
-
-    return {
-        "earnings_date": latest.get("period", ""),
-        "eps_actual": actual,
-        "eps_estimate": estimate,
-        "surprise_pct": round(surprise_pct, 2),
-        "signal": signal,
-        "from_cache": from_cache,
-    }
+            signal = 0
+        days[period] = {
+            "eps_actual": actual,
+            "eps_estimate": estimate,
+            "surprise_pct": round(surprise, 2),
+            "sup_signal": signal,
+        }
+    return days

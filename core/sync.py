@@ -1,13 +1,13 @@
-"""Syncs finished reports to the central database server.
+"""Syncs finished export files to the central database server.
 
-After each CSV row is written locally, the same row (plus the raw skill
-outputs) is POSTed to the receiver behind your Cloudflare Tunnel. If the
-server is unreachable the payload is queued in data/outbox/ and retried
-automatically the next time the agent starts.
+After each CSV export is written locally, the whole file is POSTed to the
+receiver behind your Cloudflare Tunnel and stored in the exports table.
+If the server is unreachable the payload is queued in data/outbox/ and
+retried automatically the next time the agent starts.
 
 Settings (config/settings.json):
   sync_enabled  - true/false
-  sync_url      - e.g. "https://your-tunnel.example.com/ingest"
+  sync_url      - e.g. "https://your-tunnel.example.com/ingest-file"
   sync_api_key  - must match api_key in server/config.json
 """
 
@@ -35,22 +35,31 @@ def _post(payload, settings):
         settings["sync_url"],
         json=payload,
         headers={"X-Api-Key": settings["sync_api_key"]},
-        timeout=15,
+        timeout=30,
     )
     resp.raise_for_status()
 
 
 def _queue(payload):
     OUTBOX_DIR.mkdir(parents=True, exist_ok=True)
-    path = OUTBOX_DIR / f"{uuid.uuid4().hex}.json"
-    path.write_text(json.dumps(payload), encoding="utf-8")
+    (OUTBOX_DIR / f"{uuid.uuid4().hex}.json").write_text(
+        json.dumps(payload), encoding="utf-8"
+    )
 
 
-def send_report(row, raw_context, settings):
-    """Send one report. Returns 'synced', 'queued', or 'disabled'."""
+def send_export(path, symbol, dtype, start, end, settings):
+    """Upload one export file. Returns 'synced', 'queued', or 'disabled'."""
     if not _configured(settings):
         return "disabled"
-    payload = {"row": {**row, "source": socket.gethostname()}, "raw": raw_context}
+    payload = {
+        "filename": path.name,
+        "symbol": symbol.upper(),
+        "dtype": dtype,
+        "start": start,
+        "end": end,
+        "source": socket.gethostname(),
+        "csv_text": path.read_text(encoding="utf-8"),
+    }
     try:
         _post(payload, settings)
         return "synced"
